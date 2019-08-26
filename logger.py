@@ -1,7 +1,14 @@
-import sys, time, psutil, threading, keyboard
+import sys, psutil, threading, keyboard, mouse
+from time import sleep, time
 from queue import Queue
 
-class Event():
+DEBUG = None
+
+args  = sys.argv[1:]
+try:
+    DEBUG = args.index('debug')
+except:
+    DEBUG = None
     pass
 
 #Functions to get the active window
@@ -9,7 +16,8 @@ def getActiveWindow_Linux():
     try:
         import wnck
     except ImportError:
-        print("wnck is not installed")
+        if DEBUG is not None:
+            print("wnck is not installed")
         wnck = None
     
     if wnck is not None:                #TRY WITH WNCK
@@ -26,7 +34,8 @@ def getActiveWindow_Linux():
             from gi.repository import Gtk, Wnck
             G = "Installed"
         except ImportError:
-            print("gi.repository not installed")
+            if DEBUG is not None:
+                print("gi.repository not installed")
             G = None
         
         if G is not None:               #TRY WITH GTK WNCK
@@ -43,7 +52,8 @@ def getActiveWindow_Linux():
                 from ewmh import EWMH
                 ewmh = EWMH()
             except ImportError:
-                print("EWMH not installed")
+                if DEBUG is not None:
+                    print("EWMH not installed")
                 ewmh = None
             
             if ewmh is not None:        #TRY WITH EXTENDED XLib
@@ -75,7 +85,8 @@ def getActiveWindow_Windows():
         import win32process, win32gui
         win = "Installed"
     except ImportError:
-        print("win32process || win32gui is not installed")
+        if DEBUG is not None:
+            print("win32process || win32gui is not installed")
         win = None
 
     if win is not None:
@@ -96,7 +107,8 @@ def getActiveWindow_Mac():
         return (NSWorkspace.sharedWorkspace()
                             .activeApplication()['NSApplicationName'])
     except ImportError:
-        print("I think AppKit is missing but idk")
+        if DEBUG is not None:
+            print("I think AppKit is missing but idk")
     return None
 
 def getActiveWindow():
@@ -107,30 +119,100 @@ def getActiveWindow():
     elif sys.platform in ['Mac', 'darwin', 'os2', 'os2emx']:
         return getActiveWindow_Mac()
     else:
-        print("sys.platform={platform} is unknown."
+        if DEBUG is not None:
+            print("sys.platform={platform} is unknown."
               .format(platform=sys.platform))
-        print(sys.version)
+        if DEBUG is not None:
+            print(sys.version)
          
     return None
 
 
 class KeyLog(threading.Thread):
     def __init__(self, evQ, lock):
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, daemon=True)
         self.evQ  = evQ
         self.lock = lock
 
-    def print_pressed_keys(self, e):
+    def pushToQueue(self, e):
         #new key event
-        keyE = Event()
-        keyE.type = 'keyboard'
-        keyE.name = e.name
-        keyE.code = e.scan_code
-        keyE.time = e.time
+        keyE = {
+            'type':     'keyboard',
+            'name':     e.name,
+            'code':     e.scan_code,
+            'window':   getActiveWindow()
+        }
 
         #put it in the queue
         with self.lock:
             self.evQ.put(keyE)
 
     def run(self):
-        keyboard.on_release(self.print_pressed_keys)
+        keyboard.on_release(self.pushToQueue)
+
+class MouseLog(threading.Thread):
+    def __init__(self, evQ, lock):
+        threading.Thread.__init__(self, daemon=True)
+        self.evQ  = evQ
+        self.lock = lock
+    
+    def pushToQueue(self, e):
+        mouseE = {
+            'type': 'mouse',
+            'button': '',
+            'x': '',
+            'y': '',
+            'delta': '',
+        }
+
+        if type(e) is mouse.MoveEvent:
+            mouseE['x'] = e.x
+            mouseE['y'] = e.y
+        elif type(e) is mouse.ButtonEvent:
+            if e.event_type == 'down':
+                return None
+            mouseE['button'] = e.button
+        else:
+            mouseE['delta']   = e.delta
+
+        #put it in the queue
+        with self.lock:
+            self.evQ.put(mouseE)
+
+    def run(self):
+        mouse.hook(self.pushToQueue)
+
+class ActivityLog(threading.Thread):
+    def __init__(self, evQ, lock):
+        threading.Thread.__init__(self, daemon=True)
+        self.evQ  = evQ
+        self.lock = lock
+        self.currentActivity = ''
+        self.stamp = -1
+    
+    def pushToQueue(self, e):
+        actE = {
+            'type'  : 'app',
+            'name'  : e[0],
+            'start' : e[1],
+            'end'   : e[2]
+        }
+
+        with self.lock:
+            self.evQ.put(actE)
+
+    def run(self):
+        self.currentActivity = getActiveWindow()
+        self.stamp = time()
+
+        while True:
+            act = getActiveWindow()
+
+            #new activity is focused
+            if self.currentActivity != act: 
+                self.pushToQueue((self.currentActivity, self.stamp, time()))
+
+                self.currentActivity = act
+                self.stamp = time()
+                
+            sleep(3)
