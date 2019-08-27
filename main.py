@@ -3,6 +3,7 @@ import threading, signal, sys, sqlite3
 from time import sleep
 from queue import Queue
 from logger import getActiveWindow, KeyLog, MouseLog, ActivityLog
+from SQLconverter import convert as SQLconvert
 
 #Open connection to db
 conn = sqlite3.connect('data.db')
@@ -20,9 +21,8 @@ procLock    = threading.Lock()
 # keyLogger.start()
 # mouseLogger = MouseLog(eventQueue, mouseLock)
 # mouseLogger.start()
-actLogger = ActivityLog(eventQueue, procLock)
-actLogger.start()
-
+# actLogger = ActivityLog(eventQueue, procLock)
+# actLogger.start()
 
 def prepareArray(evt, arr, fv):
     #See if evt is already in the list
@@ -47,7 +47,6 @@ def insertArray(arr, fv, query, template):
 
     conn.commit()
     pass
-
 
 def main():
     while True:
@@ -220,11 +219,11 @@ def main():
         #wait 10 seconds until processing the next event stack
         sleep(10)
 
-def exit_gracefully(signum, frame):\
+def exit_gracefully(signum, frame):
     #Original SIGINT handler
     signal.signal(signal.SIGINT, original_sigint)
     try:
-        if input("\nDo you really want to quit? (y/n)> ").lower().startswith('y'):
+        if input("\nDo you really want to quit? (y/N)> ").lower().startswith('y'):
             sys.exit(1)
     except KeyboardInterrupt:
         print("Ok ok, quitting")
@@ -239,11 +238,21 @@ def exit_gracefully(signum, frame):\
     signal.signal(signal.SIGINT, exit_gracefully)
 
 if __name__ == '__main__':
+    try:
+        JSON = sys.argv[1:].index("json")
+        #Request to convert sqlite3 db to json file
+        if JSON >= 0:
+            SQLconvert("data.db")
+            sys.exit(0)
+    except:
+        pass
+
     #Store the original SIGINT handler
     original_sigint = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, exit_gracefully)
     main()
 
-    #keyLogger.join()
-    #mouseLogger.join()
-    #actLogger.join()
+    # UNNECESSARY
+    # keyLogger.join()
+    # mouseLogger.join()
+    # actLogger.join()
