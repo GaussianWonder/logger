@@ -17,12 +17,12 @@ mouseLock   = threading.Lock()
 procLock    = threading.Lock()
 
 #Loggers
-# keyLogger   = KeyLog(eventQueue, keyLock)
-# keyLogger.start()
-# mouseLogger = MouseLog(eventQueue, mouseLock)
-# mouseLogger.start()
-# actLogger = ActivityLog(eventQueue, procLock)
-# actLogger.start()
+keyLogger   = KeyLog(eventQueue, keyLock)
+keyLogger.start()
+mouseLogger = MouseLog(eventQueue, mouseLock)
+mouseLogger.start()
+actLogger = ActivityLog(eventQueue, procLock)
+actLogger.start()
 
 def prepareArray(evt, arr, fv):
     #See if evt is already in the list
