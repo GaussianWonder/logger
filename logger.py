@@ -1,15 +1,56 @@
-import sys, psutil, threading, keyboard, mouse
+import sys, psutil, threading, keyboard, mouse, json
 from time import sleep, time
 from queue import Queue
 
 DEBUG = None
 
+#Check for debug argument
 args  = sys.argv[1:]
 try:
     DEBUG = args.index('debug')
 except:
     DEBUG = None
     pass
+
+class Trie:
+    data = {}
+
+    def add(self, word):
+        cur = self.data
+        for ch in word:
+            if ch not in cur:
+                cur[ch] = {}
+            cur = cur[ch]
+
+        cur['*'] = cur['*'] + 1 if '*' in cur else 1
+
+    def search(self, word):
+        cur = self.data
+        for ch in word:
+            if ch not in cur:
+                return False
+            cur = cur[ch]
+
+        if '*' in cur:
+            return cur['*']
+        else:
+            return 0
+
+    def printToFile(self, fileName):
+        with open(fileName, 'w') as dicTrieFile:
+            dicTrieFile.write(json.dumps(self.data, indent=4, sort_keys=True))
+
+    def extractFromFile(self, fileName):
+        #Init the trie with the dicitonary file
+        with open(fileName, 'r') as f:
+            try:
+                dicTrie = json.load(f)
+            except:
+                dicTrie = None
+
+        if dicTrie is not None:
+            self.data = dicTrie
+
 
 #Functions to get the active window
 def getActiveWindow_Linux():
@@ -127,12 +168,16 @@ def getActiveWindow():
          
     return None
 
+specialChars = tuple("`\'")
+notSeparators = ("shift")
 
 class KeyLog(threading.Thread):
     def __init__(self, evQ, lock):
         threading.Thread.__init__(self, daemon=True)
         self.evQ  = evQ
         self.lock = lock
+        self.trie = Trie()
+        self.wordBuffer = []
 
     def pushToQueue(self, e):
         #new key event
@@ -142,6 +187,16 @@ class KeyLog(threading.Thread):
             'code':     e.scan_code,
             'window':   getActiveWindow()
         }
+
+        key = e.name.lower()
+        if len(key) == 1 and ((key >= 'a' and key <= 'z') or (key >= '0' and key <='9') or (key in specialChars)):
+            #Add to word buffer, it's a letter
+            self.wordBuffer.append(key)
+        elif len(self.wordBuffer) > 0 and (key not in notSeparators):
+            #Found a separator, insert into trie      
+            self.trie.add(self.wordBuffer)
+            self.wordBuffer = []
+
 
         #put it in the queue
         with self.lock:

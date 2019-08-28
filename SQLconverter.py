@@ -32,7 +32,6 @@ def convert(dbPath):
             #Generate and save JSON files with the table name for each of the database tables
             with open(table_name['name']+'.json', 'w') as the_file:
                 the_file.write(json.dumps(results, indent=4, sort_keys=True))
-                #the_file.write(format(results).replace(" u'", "'").replace("'", "\""))
 
     connection.close()
 

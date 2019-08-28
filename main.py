@@ -1,5 +1,5 @@
 # Main event loop
-import threading, signal, sys, sqlite3
+import threading, signal, sys, sqlite3, json
 from time import sleep
 from queue import Queue
 from logger import getActiveWindow, KeyLog, MouseLog, ActivityLog
@@ -216,28 +216,38 @@ def main():
                 (0, 1, 2)
             )
 
+        #print(json.dumps(keyLogger.trie.data, indent=4, sort_keys=True))
+
         #wait 10 seconds until processing the next event stack
         sleep(10)
+
+def forceClose():
+    try:
+        conn.commit()
+        conn.close()
+    except:
+        pass
+
+    #Save the keylogger's dictionary
+    keyLogger.trie.printToFile('dictionary.json')
+
+    sys.exit(1)
 
 def exit_gracefully(signum, frame):
     #Original SIGINT handler
     signal.signal(signal.SIGINT, original_sigint)
     try:
         if input("\nDo you really want to quit? (y/N)> ").lower().startswith('y'):
-            sys.exit(1)
+            forceClose()
     except KeyboardInterrupt:
         print("Ok ok, quitting")
-        try:
-            conn.commit()
-            conn.close()
-        except:
-            pass
-        sys.exit(1)
+        forceClose()
 
     #Restore the exit gracefully handler here    
     signal.signal(signal.SIGINT, exit_gracefully)
 
 if __name__ == '__main__':
+    #Check for json argument
     try:
         JSON = sys.argv[1:].index("json")
         #Request to convert sqlite3 db to json file
@@ -246,6 +256,9 @@ if __name__ == '__main__':
             sys.exit(0)
     except:
         pass
+
+    #Initialise keylogger's dictionary
+    keyLogger.trie.extractFromFile('dictionary.json')
 
     #Store the original SIGINT handler
     original_sigint = signal.getsignal(signal.SIGINT)
